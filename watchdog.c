@@ -11,18 +11,14 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "include/config.h"
-#include "include/logger.h"
 // #include "include/daemon.h"
+#include "include/logger.h"
 #include "include/process.h"
-
-ManagedProcess watch_list[MAX_PROCESSES];
-int process_count = 0;
 
 volatile sig_atomic_t keep_running = 1;
 volatile sig_atomic_t reload_requested = 0;
 
-void handle_sig(int sig) {
+void handle_signal(int sig) {
   if (sig == SIGHUP) {
     reload_requested = 1;
   } else if (sig == SIGINT || sig == SIGTERM) {
@@ -32,7 +28,7 @@ void handle_sig(int sig) {
 
 void setup_signals() {
   struct sigaction sa;
-  sa.sa_handler = handle_sig;
+  sa.sa_handler = handle_signal;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
 
@@ -41,67 +37,33 @@ void setup_signals() {
   sigaction(SIGHUP, &sa, NULL);
 }
 
-void do_reload(const char *filename) {
-  write_log("[SYSTEM] Otrzymano SIGHUP. Przeładowywanie konfiguracji...");
+void create_pid_file() {
+  FILE *pid_file = fopen("/tmp/watchdog.pid", "w");
 
-  ManagedProcess new_watch_list[MAX_PROCESSES];
-  memset(new_watch_list, 0, sizeof(new_watch_list));
-  int new_process_count = read_config(filename, new_watch_list);
-
-  if (new_process_count == -1) {
-    write_log("Blad odczytu pliku! Przerywam przeładowanie. Stara konfiguracja "
-              "się nie zmieniła.");
-    return;
+  if (pid_file) {
+    fprintf(pid_file, "%d\n", getpid());
+    fclose(pid_file);
   }
+}
 
-  if (new_process_count == 0) {
-    write_log(
-        "[SYSTEM] Plik konfiguracyjny jest pusty! Przerywam przeładowanie.");
-    return;
-  }
+int check_pid_file() {
+  FILE *pid_file = fopen("/tmp/watchdog.pid", "r");
 
-  for (int i = 0; i < process_count; i++) {
+  if (pid_file) {
+    pid_t old_pid;
 
-    int found = 0;
-    for (int j = 0; j < new_process_count; j++) {
-      if (strcmp(watch_list[i].name, new_watch_list[j].name) == 0) {
-        if (strcmp(watch_list[i].command, new_watch_list[j].command) == 0 &&
-            watch_list[i].cpu_limit == new_watch_list[j].cpu_limit &&
-            watch_list[i].mem_limit == new_watch_list[j].mem_limit) {
-
-          new_watch_list[j].current_pid = watch_list[i].current_pid;
-        } else {
-          char msg[1024];
-          snprintf(msg, sizeof(msg),
-                   "[RELOAD] Zmodyfikowano limity dla '%s'. Zatrzymywanie "
-                   "starej instancji...",
-                   watch_list[i].name);
-          write_log(msg);
-          if (watch_list[i].current_pid > 0)
-            kill(watch_list[i].current_pid, SIGTERM);
-        }
-        found = 1;
-        break;
+    if (fscanf(pid_file, "%d", &old_pid) == 1) {
+      if (kill(old_pid, 0) == 0) {
+        printf("Watchdog już działa (PID: %d)!\n", old_pid);
+        fclose(pid_file);
+        return -1;
       }
     }
-    if (!found && watch_list[i].current_pid > 0) {
-      char msg[1024];
-      snprintf(msg, sizeof(msg),
-               "[RELOAD] Usunięto proces '%s' z konfiguracji. Zatrzymywanie...",
-               watch_list[i].name);
-      write_log(msg);
-      kill(watch_list[i].current_pid, SIGTERM);
-    }
+    fclose(pid_file);
   }
 
-  memcpy(watch_list, new_watch_list, sizeof(ManagedProcess) * MAX_PROCESSES);
-  process_count = new_process_count;
-
-  for (int i = 0; i < process_count; i++) {
-    if (watch_list[i].current_pid == 0) {
-      start_process(&watch_list[i]);
-    }
-  }
+  create_pid_file();
+  return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -111,14 +73,9 @@ int main(int argc, char *argv[]) {
   }
 
   char *config_file = argv[1];
-  process_count = read_config(config_file, watch_list);
 
-  if (process_count == -1) {
+  if (check_pid_file() == -1) {
     return EXIT_FAILURE;
-  }
-
-  if (process_count == 0) {
-    return EXIT_SUCCESS;
   }
 
   // daemonize();
@@ -126,81 +83,35 @@ int main(int argc, char *argv[]) {
 
   write_log("[SYSTEM] Watchdog wystartował pomyślnie i rozpoczął nadzór.");
 
-  for (int i = 0; i < process_count; i++) {
-    start_process(&watch_list[i]);
-  }
+  process_init(config_file);
 
   while (keep_running) {
     if (reload_requested) {
       reload_requested = 0;
-      do_reload(config_file);
+      process_reload();
     }
 
     int status;
     pid_t dead_pid = waitpid(-1, &status, 0);
+
+    if (dead_pid == 0) {
+      sleep(1);
+      continue;
+    }
 
     if (dead_pid < 0 && errno == EINTR) {
       continue;
     }
 
     if (dead_pid > 0 && keep_running) {
-      for (int i = 0; i < process_count; i++) {
-        if (watch_list[i].current_pid == dead_pid) {
-          watch_list[i].current_pid = 0;
-
-          char reason[128];
-          if (WIFEXITED(status)) {
-            snprintf(reason, sizeof(reason),
-                     "zakończył się samoczynnie z kodem: %d",
-                     WEXITSTATUS(status));
-          } else if (WIFSIGNALED(status)) {
-            int signal_num = WTERMSIG(status);
-
-            if (signal_num == SIGKILL) {
-              snprintf(reason, sizeof(reason),
-                       "SIGKILL (twardy limit CPU lub brak RAMu)");
-            } else if (signal_num == SIGSEGV) {
-              snprintf(reason, sizeof(reason),
-                       "SIGSEGV (błąd ochrony pamięci)");
-            } else if (signal_num == SIGXCPU) {
-              snprintf(reason, sizeof(reason),
-                       "SIGXCPU (miękki limit procesora)");
-            } else if (signal_num == SIGTERM) {
-              snprintf(reason, sizeof(reason),
-                       "SIGTERM (poproszono o wyłączenie)");
-            } else {
-              snprintf(reason, sizeof(reason), "sygnał nr %d", signal_num);
-            }
-          } else {
-            snprintf(reason, sizeof(reason),
-                     "nieznana (zniknął w niewyjaśnionych okolicznościach)");
-          }
-
-          char msg[1024];
-          snprintf(msg, sizeof(msg),
-                   "[RESTART] Proces '%s' (PID: %d) zakończył działanie. "
-                   "Przyczyna: %s. Uruchamianie ponownie...",
-                   watch_list[i].name, dead_pid, reason);
-
-          write_log(msg);
-
-          sleep(1);
-          start_process(&watch_list[i]);
-          break;
-        }
-      }
+      process_handle_death(dead_pid, status);
     }
   }
 
-  write_log("[SYSTEM] Zamykanie procesów potomnych...");
-
-  for (int i = 0; i < process_count; i++) {
-    if (watch_list[i].current_pid > 0) {
-      kill(watch_list[i].current_pid, SIGTERM);
-    }
-  }
-
+  process_shutdown();
   write_log("[SYSTEM] Watchdog zakończył działanie.");
+
+  unlink("/tmp/watchdog.pid");
 
   while (waitpid(-1, NULL, WNOHANG) > 0)
     ;

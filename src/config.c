@@ -15,6 +15,7 @@ int read_config(const char *filename, ManagedProcess *watch_list) {
     fprintf(file, "# --- Plik konfiguracyjny Demona Watchdog ---\n");
     fprintf(file, "# Format wpisu:\n");
     fprintf(file, "# Format: <Nazwa> <CPU_sek> <RAM_MB> <Sciezka>\n");
+    fprintf(file, "#\n");
     fprintf(file, "# CPU_sek = 0 oznacza brak limitu\n");
     fprintf(file, "# RAM_MB = 0 oznacza brak limitu\n");
     fprintf(file, "#\n");
