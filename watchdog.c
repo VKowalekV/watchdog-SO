@@ -1,19 +1,17 @@
 #include <errno.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/resource.h>
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <time.h>
 #include <unistd.h>
 
+#include "include/config.h"
 #include "include/daemon.h"
 #include "include/logger.h"
 #include "include/process.h"
+
+#define PID_FILE "/var/run/watchdog.pid"
 
 volatile sig_atomic_t keep_running = 1;
 volatile sig_atomic_t reload_requested = 0;
@@ -38,7 +36,7 @@ void setup_signals() {
 }
 
 void create_pid_file() {
-  FILE *pid_file = fopen("/tmp/watchdog.pid", "w");
+  FILE *pid_file = fopen(PID_FILE, "w");
 
   if (pid_file) {
     fprintf(pid_file, "%d\n", getpid());
@@ -47,7 +45,7 @@ void create_pid_file() {
 }
 
 int check_pid_file() {
-  FILE *pid_file = fopen("/tmp/watchdog.pid", "r");
+  FILE *pid_file = fopen(PID_FILE, "r");
 
   if (pid_file) {
     pid_t old_pid;
@@ -62,28 +60,27 @@ int check_pid_file() {
     fclose(pid_file);
   }
 
-  create_pid_file();
   return 0;
 }
 
-int main(int argc, char *argv[]) {
-  if (argc < 2) {
-    printf("Uzycie: %s <plik_konfiguracyjny>\n", argv[0]);
-    return EXIT_FAILURE;
-  }
-
-  char *config_file = argv[1];
-
+int main() {
   if (check_pid_file() == -1) {
     return EXIT_FAILURE;
   }
 
+  ManagedProcess temp_list[MAX_PROCESSES];
+  int check = read_config(CONFIG_FILE, temp_list);
+  if (check <= 0) {
+    return EXIT_SUCCESS;
+  }
+
   daemonize();
+  create_pid_file();
   setup_signals();
 
   write_log("[SYSTEM] Watchdog wystartował pomyślnie i rozpoczął nadzór.");
 
-  process_init(config_file);
+  process_init();
 
   while (keep_running) {
     if (reload_requested) {
@@ -111,7 +108,7 @@ int main(int argc, char *argv[]) {
   process_shutdown();
   write_log("[SYSTEM] Watchdog zakończył działanie.");
 
-  unlink("/tmp/watchdog.pid");
+  unlink(PID_FILE);
 
   while (waitpid(-1, NULL, WNOHANG) > 0)
     ;

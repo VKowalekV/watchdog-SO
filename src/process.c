@@ -1,12 +1,9 @@
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/resource.h>
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <time.h>
 #include <unistd.h>
 
 #include "../include/config.h"
@@ -15,14 +12,12 @@
 
 static ManagedProcess watch_list[MAX_PROCESSES];
 static int process_count = 0;
-static char current_config_file[256];
 
 static void start_process(ManagedProcess *process);
 static void get_death_reason(int status, char *reason, size_t size);
 
-void process_init(const char *config_file) {
-  strncpy(current_config_file, config_file, sizeof(current_config_file));
-  process_count = read_config(current_config_file, watch_list);
+void process_init() {
+  process_count = read_config(CONFIG_FILE, watch_list);
 
   if (process_count <= 0) {
     write_log("[SYSTEM] Błąd wczytywania lub plik config jest pusty!");
@@ -42,7 +37,7 @@ void process_reload() {
 
   ManagedProcess new_watch_list[MAX_PROCESSES];
   memset(new_watch_list, 0, sizeof(new_watch_list));
-  int new_process_count = read_config(current_config_file, new_watch_list);
+  int new_process_count = read_config(CONFIG_FILE, new_watch_list);
 
   if (new_process_count <= 0) {
     write_log(
@@ -142,7 +137,7 @@ void process_shutdown() {
 
 static void start_process(ManagedProcess *process) {
   if (access(process->command, X_OK) == -1) {
-    char msg[1024];
+    char msg[2048];
     snprintf(msg, sizeof(msg),
              "[ERROR] Plik dla procesu '%s' (%s) nie istnieje lub brak praw do "
              "wykonania!",
