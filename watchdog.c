@@ -11,7 +11,7 @@
 #include <time.h>
 #include <unistd.h>
 
-// #include "include/daemon.h"
+#include "include/daemon.h"
 #include "include/logger.h"
 #include "include/process.h"
 
@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  // daemonize();
+  daemonize();
   setup_signals();
 
   write_log("[SYSTEM] Watchdog wystartował pomyślnie i rozpoczął nadzór.");
