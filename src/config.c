@@ -1,9 +1,20 @@
 #include "../include/config.h"
-#include "../include/logger.h"
+
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "../include/logger.h"
+
+/**
+ * @brief Wczytuje i parsuje systemowy plik konfiguracyjny (watchdog.conf).
+ * Jeśli plik nie istnieje, tworzy wymagane katalogi i generuje domyślny plik.
+ * Zabezpiecza program przed przepełnieniem buforów i niewłaściwym formatem.
+ *
+ * @param filename Ścieżka do pliku konfiguracyjnego
+ * @param watch_list Tablica docelowa na odczytane obiekty ManagedProcess
+ * @return Liczba pomyślnie wczytanych procesów lub -1 w przypadku błędu
+ */
 int read_config(const char *filename, ManagedProcess *watch_list) {
   FILE *file = fopen(filename, "r");
 
@@ -13,8 +24,7 @@ int read_config(const char *filename, ManagedProcess *watch_list) {
     file = fopen(filename, "w");
 
     if (!file) {
-      perror("Krytyczny blad: Nie mozna utworzyc pliku konfiguracyjnego (brak "
-             "uprawnień root? użyj sudo)");
+      perror("Krytyczny blad: Nie mozna utworzyc pliku konfiguracyjnego (brak uprawnień root? użyj sudo)");
       return -1;
     }
 
@@ -40,14 +50,16 @@ int read_config(const char *filename, ManagedProcess *watch_list) {
   }
 
   int process_count = 0;
-  char line[2048];
+  char line[2048];  // Bezpieczny bufor zdolny pomieścić ścieżkę nazwę oraz limity
 
+  // Odczyt pliku linia po linii
   while (fgets(line, sizeof(line), file)) {
-
+    // Ignorowanie pustych linii i komentarzy (zaczynających się od '#')
     if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') {
       continue;
     }
 
+    // Informowanie załadowaniu maksymalnej ilości procesów
     if (process_count >= MAX_PROCESSES) {
       char msg[256];
       snprintf(msg, sizeof(msg),
@@ -58,20 +70,19 @@ int read_config(const char *filename, ManagedProcess *watch_list) {
       break;
     }
 
-    if (sscanf(line, "%63s %d %d %1023s", watch_list[process_count].name,
-               &watch_list[process_count].cpu_limit,
-               &watch_list[process_count].mem_limit,
-               watch_list[process_count].command) == 4) {
+    // Parsowanie linii do struktury i kontrola przepełnienia
+    // Zwiększa licznik tylko jeśli wszystkie 4 argumenty wczytano poprawnie
+    if (sscanf(line, "%63s %d %d %1023s", watch_list[process_count].name, &watch_list[process_count].cpu_limit,
+               &watch_list[process_count].mem_limit, watch_list[process_count].command) == 4) {
       process_count++;
     }
   }
 
   fclose(file);
 
+  // Wysłanie komunikatu w przypadku pustego pliku konfiguracyjnego
   if (process_count == 0) {
-    printf(
-        "Plik konfiguracyjny '%s' jest pusty lub zawiera tylko komentarze.\n",
-        filename);
+    printf("Plik konfiguracyjny '%s' jest pusty lub zawiera tylko komentarze.\n", filename);
     printf("Proszę dodać przynajmniej jeden proces do nadzorowania.\n");
 
     return -1;

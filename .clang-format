@@ -1,0 +1,5 @@
+BasedOnStyle: GOOGLE
+IndentWidth: 2
+AlignConsecutiveDeclarations: false
+AlignConsecutiveAssignments: false
+ColumnLimit: 120
