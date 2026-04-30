@@ -124,12 +124,6 @@ int main() {
     int status;
     pid_t dead_pid = waitpid(-1, &status, 0);
 
-    // Brak procesów potomnych (nic nie robi)
-    if (dead_pid == 0) {
-      sleep(1);
-      continue;
-    }
-
     // Przerwanie waitpid() przez sygnał asynchroniczny (np. SIGHUP)
     if (dead_pid < 0 && errno == EINTR) {
       continue;
