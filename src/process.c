@@ -39,6 +39,9 @@ void process_init() {
   }
 }
 
+/**
+ * @brief Obsługuje sygnał SIGHUP. Porównuje nową konfigurację ze starą i wprowadza zmiany.
+ */
 void process_reload() {
   write_log("[SYSTEM] Otrzymano SIGHUP. Przeładowywanie konfiguracji...");
 
@@ -115,6 +118,11 @@ void process_reload() {
   }
 }
 
+/**
+ * @brief Reakcja na śmierć procesu potomnego (restart i zalogowanie przyczyny).
+ * @param dead_pid Numer PID procesu, który zmarł
+ * @param status Kod wyjścia zwrócony przez wywołanie waitpid
+ */
 void process_handle_death(pid_t dead_pid, int status) {
   for (int i = 0; i < process_count; i++) {
     if (watch_list[i].current_pid == dead_pid) {
@@ -136,6 +144,9 @@ void process_handle_death(pid_t dead_pid, int status) {
   }
 }
 
+/**
+ * @brief Bezpieczne zamknięcie wszystkich nadzorowanych procesów poprzez wysłanie SIGTERM.
+ */
 void process_shutdown() {
   write_log("[SYSTEM] Zamykanie procesów potomnych...");
   for (int i = 0; i < process_count; i++) {
@@ -145,6 +156,10 @@ void process_shutdown() {
   }
 }
 
+/**
+ * @brief Tworzy nowy proces potomny i nakłada na niego limity zasobów.
+ * @param process Wskaźnik na strukturę nadzorowanego procesu
+ */
 static void start_process(ManagedProcess *process) {
   if (access(process->command, X_OK) == -1) {
     char msg[2048];
@@ -195,6 +210,12 @@ static void start_process(ManagedProcess *process) {
   }
 }
 
+/**
+ * @brief Zamienia status zakończenia procesu na tekstową przyczynę błędu.
+ * @param status Kod wyjścia z funkcji waitpid
+ * @param reason Bufor docelowy na komunikat
+ * @param size Rozmiar bufora
+ */
 static void get_death_reason(int status, char *reason, size_t size) {
   if (WIFEXITED(status)) {
     snprintf(reason, size, "kod wyjścia %d", WEXITSTATUS(status));

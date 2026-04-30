@@ -32,11 +32,14 @@ typedef struct {
 } ManagedProcess;
 
 /**
- * @brief Otwiera i parsuje plik konfiguracyjny, zapisując dane do tablicy.
+ * @brief Wczytuje i parsuje systemowy plik konfiguracyjny
+ * Jeśli plik nie istnieje, tworzy wymagane katalogi i generuje domyślny plik.
+ * Zabezpiecza program przed przepełnieniem buforów i niewłaściwym formatem.
+ *
  * @param filename Ścieżka do pliku konfiguracyjnego
- * @param list Tablica docelowa na odczytane obiekty ManagedProcess
- * @return Liczba pomyślnie wczytanych procesów lub -1 w razie błędu
+ * @param watch_list Tablica docelowa na odczytane obiekty ManagedProcess
+ * @return Liczba pomyślnie wczytanych procesów lub -1 w przypadku błędu
  */
-int read_config(const char *filename, ManagedProcess *list);
+int read_config(const char *filename, ManagedProcess *watch_list);
 
 #endif

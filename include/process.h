@@ -9,7 +9,8 @@
 #include <sys/types.h>
 
 /**
- * @brief Pierwsze uruchomienie. Inicjalizuje tablicę procesów na podstawie konfiguracji.
+ * @brief Inicjalizuje procesy podczas startu demona.
+ * Wczytuje plik konfiguracyjny i dla każdego zdefiniowanego procesu wywołuje fork/exec.
  */
 void process_init();
 

@@ -4,8 +4,8 @@
 #include <time.h>
 
 /**
- * @brief Bezpieczny zapis logu z datą i czasem do pliku watchdog.log.
- * @param message Tekst do zapisania
+ * @brief Bezpieczny zapis logu z datą i czasem do pliku logów.
+ * @param message Treść komunikatu do zapisania
  */
 void write_log(const char *message) {
   // Otwarcie pliku w trybie dopsiywania

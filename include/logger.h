@@ -12,8 +12,8 @@
 #define LOG_FILE "/var/log/watchdog.log"
 
 /**
- * @brief Zapisuje wiadomość do pliku logów wraz z aktualną datą i czasem.
- * @param message Treść komunikatu
+ * @brief Bezpieczny zapis logu z datą i czasem do pliku logów.
+ * @param message Treść komunikatu do zapisania
  */
 void write_log(const char *message);
 

@@ -11,9 +11,9 @@
  * Jeśli plik nie istnieje, tworzy wymagane katalogi i generuje domyślny plik.
  * Zabezpiecza program przed przepełnieniem buforów i niewłaściwym formatem.
  *
- * @param filename Ścieżka do pliku
- * @param watch_list Tablica do której zostaną zapisane wczytane procesy
- * @return Liczba wczytanych procesów lub -1 w przypadku błędu
+ * @param filename Ścieżka do pliku konfiguracyjnego
+ * @param watch_list Tablica docelowa na odczytane obiekty ManagedProcess
+ * @return Liczba pomyślnie wczytanych procesów lub -1 w przypadku błędu
  */
 int read_config(const char *filename, ManagedProcess *watch_list) {
   FILE *file = fopen(filename, "r");
