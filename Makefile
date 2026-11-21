@@ -1,5 +1,5 @@
-CC=gcc
-CFLAGS=-Wall -Wextra -Iinclude
+CC ?= gcc
+CFLAGS = -Wall -Wextra -Iinclude $(EXTRA_CFLAGS)
 TARGET=build/watchdog
 SRC=watchdog.c src/config.c src/daemon.c src/logger.c src/process.c 
 

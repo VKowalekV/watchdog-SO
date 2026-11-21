@@ -10,7 +10,7 @@ Systemowy demon nadzorujący procesy. Uruchamia podane programy jako podprocesy,
 
 - System Linux (testowano na Ubuntu)
 - Kompilator `gcc` i `make`
-- Uprawnienia `root` (demon zapisuje pliki w `/etc/`, `/var/run/`, `/var/log/`)
+- Uprawnienia `root` przy korzystaniu z domyślnych ścieżek systemowych (`/etc/`, `/var/run/`, `/var/log/`) — przy podaniu własnych ścieżek przez flagi CLI demon działa bez `roota`
 
 ---
 
@@ -74,15 +74,32 @@ RAM_test     50       30      /home/user/watchdog_so/build/tests/RAM_test
 
 ---
 
-## 3. Uruchomienie
+## 3. Uruchomienie i opcje CLI
+
+Domyślny tryb demona w tle (korzysta z `/etc/watchdog/watchdog.conf`, `/var/log/watchdog.log`, `/var/run/watchdog.pid`):
 
 ```bash
 sudo ./build/watchdog
 ```
 
-Demon uruchamia się w tle (odłącza od terminala). Demon działa dalej jako usługa systemowa.
+### Opcje CLI
 
-Logi można obserwować na bieżąco:
+| Flaga | Opis | Domyślnie |
+| ----- | ---- | --------- |
+| `-c, --config <ścieżka>` | Ścieżka do pliku konfiguracyjnego | `/etc/watchdog/watchdog.conf` |
+| `-l, --log <ścieżka>` | Ścieżka do pliku logów | `/var/log/watchdog.log` |
+| `-p, --pid <ścieżka>` | Ścieżka do pliku PID | `/var/run/watchdog.pid` |
+| `-f, --foreground` | Uruchom na pierwszym planie (bez daemonizacji; logi także na `stderr`) | wyłączone |
+| `-h, --help` | Wyświetl pomoc i zakończ | — |
+| `-v, --version` | Wyświetl wersję i zakończ | — |
+
+### Uruchomienie bez `roota` (tryb pierwszoplanowy)
+
+```bash
+./build/watchdog --foreground -c ./watchdog.conf -l ./watchdog.log -p ./watchdog.pid
+```
+
+W trybie demona logi można obserwować na bieżąco:
 
 ```bash
 sudo tail -f /var/log/watchdog.log

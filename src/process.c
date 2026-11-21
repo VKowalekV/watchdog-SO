@@ -1,5 +1,6 @@
 #include "../include/process.h"
 
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,9 +25,10 @@ static void get_death_reason(int status, char *reason, size_t size);
  * @brief Inicjalizuje procesy podczas startu demona.
  * Wczytuje plik konfiguracyjny i dla każdego zdefiniowanego procesu wywołuje
  * fork/exec.
+ * @param config_path Ścieżka do pliku konfiguracyjnego
  */
-void process_init() {
-  process_count = read_config(CONFIG_FILE, watch_list);
+void process_init(const char *config_path) {
+  process_count = read_config(config_path, watch_list);
 
   if (process_count <= 0) {
     write_log("[SYSTEM] Błąd wczytywania lub plik config jest pusty!");
@@ -41,15 +43,16 @@ void process_init() {
 
 /**
  * @brief Obsługuje sygnał SIGHUP. Porównuje nową konfigurację ze starą i wprowadza zmiany.
+ * @param config_path Ścieżka do pliku konfiguracyjnego
  */
-void process_reload() {
+void process_reload(const char *config_path) {
   write_log("[SYSTEM] Otrzymano SIGHUP. Przeładowywanie konfiguracji...");
 
   int isChanged = 0;
 
   ManagedProcess new_watch_list[MAX_PROCESSES];
   memset(new_watch_list, 0, sizeof(new_watch_list));
-  int new_process_count = read_config(CONFIG_FILE, new_watch_list);
+  int new_process_count = read_config(config_path, new_watch_list);
 
   if (new_process_count <= 0) {
     write_log("[SYSTEM] Plik konfiguracyjny jest pusty! Przerywam przeładowanie.");
@@ -179,7 +182,7 @@ static void start_process(ManagedProcess *process) {
     // Nałożenie limitów sprzętowych
     if (process->mem_limit > 0) {
       struct rlimit rl_mem;
-      rl_mem.rlim_cur = rl_mem.rlim_max = process->mem_limit * 1024 * 1024;  // MB na bajty
+      rl_mem.rlim_cur = rl_mem.rlim_max = (rlim_t)process->mem_limit * 1024ULL * 1024ULL;  // MB na bajty
       setrlimit(RLIMIT_AS, &rl_mem);
     }
 

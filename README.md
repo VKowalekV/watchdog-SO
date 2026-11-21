@@ -8,7 +8,8 @@ A lightweight, zero-dependency Linux process supervisor daemon written in pure C
 
 ## Key Features
 
-- **Daemonization:** Detaches from the controlling terminal using a double-`fork`, `setsid()`, `umask(0)`, `chdir("/")`, and redirects standard I/O streams to `/dev/null`.
+- **Daemonization & Foreground Mode:** Detaches from the controlling terminal using a double-`fork`, `setsid()`, `umask(0)`, `chdir("/")`, and `/dev/null` redirection, or stays in the foreground (`--foreground`) with logs mirrored to `stderr`.
+- **Flexible Runtime Paths:** Supports custom config, log, and PID file paths via CLI flags (`--config`, `--log`, `--pid`), enabling non-root and containerized usage.
 - **Declarative Configuration:** Supervises up to 32 concurrent processes (`MAX_PROCESSES`) defined in `/etc/watchdog/watchdog.conf`.
 - **Kernel-Enforced Resource Limits:** Applies per-process limits via `setrlimit()` (`RLIMIT_CPU` in seconds and `RLIMIT_AS` in MB; `0` disables a limit).
 - **Process-Group Isolation:** Places each child into its own process group (`setpgid(0, 0)`) so process trees can be cleanly terminated together.
@@ -48,7 +49,7 @@ A lightweight, zero-dependency Linux process supervisor daemon written in pure C
 
 - Linux operating system (tested on Ubuntu)
 - `gcc` compiler and `make`
-- `root` privileges (the daemon writes to `/etc/`, `/var/run/`, and `/var/log/`)
+- `root` privileges only when using default system paths (`/etc/`, `/var/run/`, `/var/log/`) — passing custom paths via CLI flags works without `root`
 
 ---
 
@@ -112,15 +113,32 @@ RAM_test     50       30      /home/user/watchdog-SO/build/tests/RAM_test
 
 ---
 
-## 3. Running
+## 3. Running & CLI Options
+
+Default background daemon mode (uses `/etc/watchdog/watchdog.conf`, `/var/log/watchdog.log`, `/var/run/watchdog.pid`):
 
 ```bash
 sudo ./build/watchdog
 ```
 
-The daemon detaches from the terminal and runs in the background as a system service.
+### CLI Options
 
-You can follow logs in real time:
+| Flag | Description | Default |
+| ---- | ----------- | ------- |
+| `-c, --config <path>` | Configuration file path | `/etc/watchdog/watchdog.conf` |
+| `-l, --log <path>` | Log file path | `/var/log/watchdog.log` |
+| `-p, --pid <path>` | PID lock file path | `/var/run/watchdog.pid` |
+| `-f, --foreground` | Run in foreground (no daemonize; mirror logs to `stderr`) | off |
+| `-h, --help` | Display usage help and exit | — |
+| `-v, --version` | Display version and exit | — |
+
+### Running Without `root` (Foreground Mode)
+
+```bash
+./build/watchdog --foreground -c ./watchdog.conf -l ./watchdog.log -p ./watchdog.pid
+```
+
+When running as a background daemon, you can follow logs in real time:
 
 ```bash
 sudo tail -f /var/log/watchdog.log

@@ -1,6 +1,7 @@
 #include "../include/config.h"
 
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -19,7 +20,16 @@ int read_config(const char *filename, ManagedProcess *watch_list) {
   FILE *file = fopen(filename, "r");
 
   if (!file) {
-    mkdir("/etc/watchdog", 0755);
+    const char *last_slash = strrchr(filename, '/');
+    if (last_slash != NULL && last_slash != filename) {
+      size_t dir_len = (size_t)(last_slash - filename);
+      if (dir_len < 1024) {
+        char parent_dir[1024];
+        memcpy(parent_dir, filename, dir_len);
+        parent_dir[dir_len] = '\0';
+        mkdir(parent_dir, 0755);
+      }
+    }
 
     file = fopen(filename, "w");
 
