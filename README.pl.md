@@ -1,3 +1,5 @@
+> [English version](README.md)
+
 # Watchdog – Instrukcja uruchomienia
 
 Systemowy demon nadzorujący procesy. Uruchamia podane programy jako podprocesy, monitoruje ich stan i restartuje je w razie zakończenia.
