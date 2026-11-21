@@ -98,11 +98,11 @@ if "$WATCHDOG_BIN" -f -c "$CONF_FILE" -l "$LOG_FILE" -p "$PID_FILE" >/dev/null 2
 fi
 
 echo "[5/7] Waiting for process startup and crasher restart logs..."
-wait_for_log "\[START\] Uruchomiono 'steady'" 50
-wait_for_log "\[START\] Uruchomiono 'crasher'" 50
-wait_for_log "\[RESTART\].*crasher.*kod wyjścia 42" 50
+wait_for_log "\[START\] Started 'steady'" 50
+wait_for_log "\[START\] Started 'crasher'" 50
+wait_for_log "\[RESTART\].*crasher.*exit code 42" 50
 
-STEADY_PID="$(grep "\[START\] Uruchomiono 'steady'" "$LOG_FILE" | head -n1 | sed -E 's/.*\(PID: ([0-9]+)\).*/\1/')"
+STEADY_PID="$(grep "\[START\] Started 'steady'" "$LOG_FILE" | head -n1 | sed -E 's/.*\(PID: ([0-9]+)\).*/\1/')"
 if [[ -z "$STEADY_PID" ]] || ! kill -0 "$STEADY_PID" 2>/dev/null; then
   echo "Steady process is not running (PID: '$STEADY_PID')" >&2
   exit 1
@@ -116,18 +116,18 @@ EOF
 
 kill -HUP "$WD_PID"
 
-wait_for_log "\[RELOAD\] Usunięto proces 'crasher'" 50
-wait_for_log "\[START\] Uruchomiono 'added'" 50
-wait_for_log "\[SYSTEM\] Przeładowywanie konfiguracji zakończone pomyślnie\." 50
+wait_for_log "\[RELOAD\] Removed process 'crasher'" 50
+wait_for_log "\[START\] Started 'added'" 50
+wait_for_log "\[SYSTEM\] Configuration reload completed successfully\." 50
 
-ADDED_PID="$(grep "\[START\] Uruchomiono 'added'" "$LOG_FILE" | head -n1 | sed -E 's/.*\(PID: ([0-9]+)\).*/\1/')"
+ADDED_PID="$(grep "\[START\] Started 'added'" "$LOG_FILE" | head -n1 | sed -E 's/.*\(PID: ([0-9]+)\).*/\1/')"
 
 if ! kill -0 "$STEADY_PID" 2>/dev/null; then
   echo "Expected unchanged 'steady' process (PID $STEADY_PID) to stay alive across SIGHUP" >&2
   exit 1
 fi
 
-STEADY_STARTS="$(grep -c "\[START\] Uruchomiono 'steady'" "$LOG_FILE")"
+STEADY_STARTS="$(grep -c "\[START\] Started 'steady'" "$LOG_FILE")"
 if [[ "$STEADY_STARTS" -ne 1 ]]; then
   echo "Expected 'steady' to start exactly once, got $STEADY_STARTS" >&2
   exit 1
@@ -144,7 +144,7 @@ if [[ "$WD_STATUS" -ne 0 ]]; then
   exit 1
 fi
 
-grep -q "\[SYSTEM\] Watchdog zakończył działanie\." "$LOG_FILE"
+grep -q "\[SYSTEM\] Watchdog shut down cleanly\." "$LOG_FILE"
 
 if [[ -e "$PID_FILE" ]]; then
   echo "Expected PID file to be removed on shutdown: $PID_FILE" >&2

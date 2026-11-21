@@ -21,26 +21,25 @@
 #define WATCHDOG_VERSION "1.1.0"
 #define PID_FILE "/var/run/watchdog.pid"
 
-// Flagi sygnalizujące głównej pętli, co ma robić
-// Muszą być typu `volatile sig_atomic_t`, aby modyfikacje z procedury obsługi
-// sygnału były bezpieczne
-volatile sig_atomic_t keep_running = 1;      // flaga która mówi czy demon ma nadal działać
-volatile sig_atomic_t reload_requested = 0;  // flaga która mówi czy zażądano przeładowania konfiguracji
+// Flags signaling main loop control flow
+// Must use `volatile sig_atomic_t` for async-signal-safe updates
+volatile sig_atomic_t keep_running = 1;      // Indicates whether the daemon should keep running
+volatile sig_atomic_t reload_requested = 0;  // Indicates whether a configuration reload was requested
 
 /**
- * @brief handler obsługi sygnałów asynchronicznych.
- * @param sig Numer odebranego sygnału
+ * @brief Async signal handler.
+ * @param sig Received signal number
  */
 void handle_signal(int sig) {
   if (sig == SIGHUP) {
-    reload_requested = 1;  // SIGHUP = przeładuj plik konfiguracyjny
+    reload_requested = 1;  // SIGHUP = reload configuration file
   } else if (sig == SIGINT || sig == SIGTERM) {
-    keep_running = 0;  // SIGTERM / SIGINT = zamknij demona
+    keep_running = 0;  // SIGTERM / SIGINT = shut down daemon
   }
 }
 
 /**
- * @brief Rejestracja sygnałów dla systemu operacyjnego.
+ * @brief Registers OS signal handlers.
  */
 void setup_signals() {
   struct sigaction sa;
@@ -48,14 +47,14 @@ void setup_signals() {
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
 
-  sigaction(SIGTERM, &sa, NULL);  // Rejestracja zamykania
-  sigaction(SIGINT, &sa, NULL);   // Rejestracja przerwania
-  sigaction(SIGHUP, &sa, NULL);   // Rejestracja hot-reload
+  sigaction(SIGTERM, &sa, NULL);  // Register graceful shutdown
+  sigaction(SIGINT, &sa, NULL);   // Register interrupt handling
+  sigaction(SIGHUP, &sa, NULL);   // Register hot-reload
 }
 
 /**
- * @brief Zamienia ścieżkę względną na bezwzględną przed ewentualnym chdir("/").
- * @return 0 w razie sukcesu, -1 przy błędzie lub zbyt długiej ścieżce
+ * @brief Resolves a relative path to an absolute path before chdir("/").
+ * @return 0 on success, -1 on failure or path truncation
  */
 static int resolve_path(const char *input, char *out, size_t out_size) {
   if (input == NULL || input[0] == '\0' || out == NULL || out_size == 0) {
@@ -89,7 +88,7 @@ static int resolve_path(const char *input, char *out, size_t out_size) {
 }
 
 /**
- * @brief Wypisuje instrukcję użycia flag CLI.
+ * @brief Prints CLI usage instructions.
  */
 static void print_usage(FILE *stream, const char *prog_name) {
   fprintf(stream,
@@ -106,8 +105,7 @@ static void print_usage(FILE *stream, const char *prog_name) {
 }
 
 /**
- * @brief Tworzy plik PID.
- * Służy aby uniknąć dwóch instancji demona.
+ * @brief Creates the PID file to prevent duplicate daemon instances.
  */
 void create_pid_file(const char *pid_file_path) {
   FILE *pid_file = fopen(pid_file_path, "w");
@@ -119,10 +117,9 @@ void create_pid_file(const char *pid_file_path) {
 }
 
 /**
- * @brief Sprawdza, czy inna instancja demona już działa.
- * Wczytuje PID z pliku i za pomocą kill(pid, 0) pyta jądro systemu, czy ten
- * proces wciąż istnieje.
- * @return 0 jeśli wolne, -1 jeśli zajęte
+ * @brief Checks whether another daemon instance is already running.
+ * Reads the PID file and queries the kernel via kill(pid, 0).
+ * @return 0 if free, -1 if already running
  */
 int check_pid_file(const char *pid_file_path) {
   FILE *pid_file = fopen(pid_file_path, "r");
@@ -132,7 +129,7 @@ int check_pid_file(const char *pid_file_path) {
 
     if (fscanf(pid_file, "%d", &old_pid) == 1) {
       if (old_pid > 0 && kill(old_pid, 0) == 0) {
-        printf("Watchdog już działa (PID: %d)!\n", old_pid);
+        fprintf(stderr, "Watchdog is already running (PID: %d)!\n", old_pid);
         fclose(pid_file);
         return -1;
       }
@@ -144,7 +141,7 @@ int check_pid_file(const char *pid_file_path) {
 }
 
 /**
- * @brief Główna pętla i wejście programu.
+ * @brief Main daemon entry point and supervision loop.
  */
 int main(int argc, char *argv[]) {
   char config_path[PATH_MAX];
@@ -208,51 +205,50 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  // Zabezpieczenie przed podwójnym uruchomieniem
+  // Prevent starting a second daemon instance
   if (check_pid_file(pid_path) == -1) {
     return EXIT_FAILURE;
   }
 
   logger_init(log_path, foreground);
 
-  // odczytanie konfiguracji
-  // Pozwala to wypisać błędy krytyczne na ekran terminala
+  // Load configuration before daemonizing so fatal errors print to the terminal
   ManagedProcess temp_list[MAX_PROCESSES];
   int check = read_config(config_path, temp_list);
   if (check < 0) {
     return EXIT_FAILURE;
   }
   if (check == 0) {
-    return EXIT_SUCCESS;  // Utworzono nowy domyślny plik konfiguracyjny
+    return EXIT_SUCCESS;  // Generated a new default configuration file
   }
 
-  // Proces staje się demonem systemowym (chyba że wybrano --foreground)
+  // Daemonize unless --foreground was passed
   if (!foreground) {
     daemonize();
   }
 
-  // Zapisujemy ostateczny PID z racji tego, że daemonize() zmieniło nam PID
+  // Record final PID after daemonize() forks
   create_pid_file(pid_path);
   setup_signals();
 
-  write_log("[SYSTEM] Watchdog wystartował pomyślnie i rozpoczął nadzór.");
+  write_log("[SYSTEM] Watchdog started successfully and began supervision.");
 
-  // Inicjalizacja procesów z konfiguracji
+  // Spawn initial processes from configuration
   process_init(config_path);
 
-  // Główna nieskończona pętla Demona
+  // Main daemon supervision loop
   while (keep_running) {
-    // przeładowanie (na sygnał SIGHUP)
+    // Handle configuration reload on SIGHUP
     if (reload_requested) {
       reload_requested = 0;
       process_reload(config_path);
     }
 
-    // Blokujące oczekiwanie na śmierć któregokolwiek z dzieci (-1)
+    // Block waiting for any child process to terminate (-1)
     int status;
     pid_t dead_pid = waitpid(-1, &status, 0);
 
-    // Przerwanie waitpid() przez sygnał asynchroniczny (np. SIGHUP) lub brak dzieci
+    // Handle waitpid() interruption by async signals (e.g. SIGHUP) or no active children
     if (dead_pid < 0) {
       if (errno == EINTR) {
         continue;
@@ -264,19 +260,19 @@ int main(int argc, char *argv[]) {
       break;
     }
 
-    // Jeśli potomek faktycznie zginął i demon wciąż ma działać
+    // Restart terminated child if daemon is still running
     if (dead_pid > 0 && keep_running) {
-      process_handle_death(dead_pid, status);  // Ubija proces i odpala go na nowo
+      process_handle_death(dead_pid, status);
     }
   }
 
-  // Zamykanie Demona
-  process_shutdown();  // Wysyła SIGTERM do wszystkich nadzorowanych procesów
-  write_log("[SYSTEM] Watchdog zakończył działanie.");
+  // Shut down daemon
+  process_shutdown();  // Send SIGTERM to all supervised processes
+  write_log("[SYSTEM] Watchdog shut down cleanly.");
 
-  unlink(pid_path);  // usunięcie pliku z PID watchdoga
+  unlink(pid_path);  // Remove watchdog PID file
 
-  // Zabezpieczenie na wypadek procesów, które potrzebują chwili na zamknięcie
+  // Reap any child processes still exiting
   while (waitpid(-1, NULL, WNOHANG) > 0);
 
   return EXIT_SUCCESS;

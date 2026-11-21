@@ -6,29 +6,29 @@
 #include <unistd.h>
 
 /**
- * @brief Zamienia aktualny proces w usługę systemową działającą w tle.
- * Tworzy nowy proces (fork), odłącza go od sesji (setsid), zamyka standardowe
- * strumienie (I/O) i przekierowuje je do /dev/null.
+ * @brief Turns the current process into a background system daemon.
+ * Forks a new process, detaches from the session (setsid), closes standard
+ * I/O streams, and redirects them to /dev/null.
  */
 void daemonize() {
-  // Rozwidlenie i zakończenie głównego procesu
+  // First fork and terminate parent process
   pid_t pid = fork();
   if (pid < 0) exit(EXIT_FAILURE);
-  if (pid > 0) exit(EXIT_SUCCESS);  // Rodzic kończy pracę
+  if (pid > 0) exit(EXIT_SUCCESS);  // Parent exits
 
-  // Utworzenie nowej sesji, by proces stał się jej liderem
+  // Create new session so child becomes session leader
   if (setsid() < 0) exit(EXIT_FAILURE);
 
-  // Drugie rozwidlenie
+  // Second fork
   pid = fork();
   if (pid < 0) exit(EXIT_FAILURE);
-  if (pid > 0) exit(EXIT_SUCCESS);  // Lider sesji kończy pracę
+  if (pid > 0) exit(EXIT_SUCCESS);  // Session leader exits
 
-  // Zmiana maski praw dostępu plików oraz przejście do katalogu głównego
+  // Reset file mode mask and change working directory to root
   umask(0);
   if (chdir("/") < 0) exit(EXIT_FAILURE);
 
-  // Zamknięcie i przekierowanie wejścia/wyjścia (I/O) do /dev/null
+  // Redirect standard I/O streams to /dev/null
   int fd = open("/dev/null", O_RDWR);
   if (fd != -1) {
     dup2(fd, STDIN_FILENO);

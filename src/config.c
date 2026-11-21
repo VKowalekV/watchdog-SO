@@ -78,13 +78,13 @@ int parse_command_args(const char *command_line, char *buf, size_t buf_size, cha
 }
 
 /**
- * @brief Wczytuje i parsuje systemowy plik konfiguracyjny (watchdog.conf).
- * Jeśli plik nie istnieje, tworzy wymagane katalogi i generuje domyślny plik.
- * Zabezpiecza program przed przepełnieniem buforów i niewłaściwym formatem.
+ * @brief Reads and parses the configuration file.
+ * If missing, creates required parent directory and generates a default template.
+ * Protects against buffer overflows and malformed entries.
  *
- * @param filename Ścieżka do pliku konfiguracyjnego
- * @param watch_list Tablica docelowa na odczytane obiekty ManagedProcess
- * @return Liczba pomyślnie wczytanych procesów, 0 gdy utworzono szablon, lub -1 w przypadku błędu
+ * @param filename Path to the configuration file
+ * @param watch_list Destination array for parsed ManagedProcess entries
+ * @return Number of loaded processes, 0 if a template was created, or -1 on error
  */
 int read_config(const char *filename, ManagedProcess *watch_list) {
   FILE *file = fopen(filename, "r");
@@ -104,58 +104,56 @@ int read_config(const char *filename, ManagedProcess *watch_list) {
     file = fopen(filename, "w");
 
     if (!file) {
-      perror("Krytyczny blad: Nie mozna utworzyc pliku konfiguracyjnego (brak uprawnień root? użyj sudo)");
+      perror("Fatal error: Unable to create configuration file (missing permissions? try sudo)");
       return -1;
     }
 
-    fprintf(file, "# --- Plik konfiguracyjny Demona Watchdog ---\n");
-    fprintf(file, "# Format wpisu:\n");
-    fprintf(file, "# Format: <Nazwa> <CPU_sek> <RAM_MB> <Sciezka> [Argumenty...]\n");
+    fprintf(file, "# --- Watchdog Daemon Configuration File ---\n");
+    fprintf(file, "# Entry format:\n");
+    fprintf(file, "# Format: <Name> <CPU_sec> <RAM_MB> <Path> [Args...]\n");
     fprintf(file, "#\n");
-    fprintf(file, "# CPU_sek = 0 oznacza brak limitu\n");
-    fprintf(file, "# RAM_MB = 0 oznacza brak limitu\n");
+    fprintf(file, "# CPU_sec = 0 means no limit\n");
+    fprintf(file, "# RAM_MB = 0 means no limit\n");
     fprintf(file, "#\n");
-    fprintf(file, "# Nazwa      CPU_sek     RAM_MB      Sciezka [Argumenty...]\n");
-    fprintf(file, "# Testowy       20       20          /bin/sh -c \"while true; do sleep 1; done\"\n");
+    fprintf(file, "# Name       CPU_sec     RAM_MB      Path [Args...]\n");
+    fprintf(file, "# Example    20          20          /bin/sh -c \"while true; do sleep 1; done\"\n");
     fclose(file);
 
     printf("========================================================\n");
-    printf("Utworzono domyślny plik konfiguracyjny w:\n");
+    printf("Created default configuration file at:\n");
     printf("--> %s\n\n", filename);
-    printf("Wpisz komendę: sudo nano %s\n", filename);
-    printf("aby dodać procesy do nadzorowania, a następnie\n");
-    printf("uruchom program Watchdog ponownie.\n");
+    printf("Edit it (e.g. sudo nano %s) to add supervised processes,\n", filename);
+    printf("then run Watchdog again.\n");
     printf("========================================================\n");
     return 0;
   }
 
   int process_count = 0;
-  char line[2048];  // Bezpieczny bufor zdolny pomieścić nazwę, limity oraz polecenie z argumentami
+  char line[2048];  // Buffer large enough to hold process name, limits, and command with arguments
 
-  // Odczyt pliku linia po linii
+  // Read file line by line
   while (fgets(line, sizeof(line), file)) {
     size_t start = 0;
     while (line[start] == ' ' || line[start] == '\t') {
       start++;
     }
 
-    // Ignorowanie pustych linii i komentarzy (zaczynających się od '#')
+    // Ignore empty lines and comments starting with '#'
     if (line[start] == '#' || line[start] == '\n' || line[start] == '\r' || line[start] == '\0') {
       continue;
     }
 
-    // Informowanie o załadowaniu maksymalnej liczby procesów
+    // Warn when maximum supervised process limit is reached
     if (process_count >= MAX_PROCESSES) {
       char msg[256];
       snprintf(msg, sizeof(msg),
-               "[WARNING] Załadowano maksymalną dozwoloną liczbę procesów "
-               "(%d). Reszta pliku konfiguracyjnego została pominięta.",
+               "[WARNING] Reached maximum number of supervised processes (%d). Remaining entries were ignored.",
                MAX_PROCESSES);
       write_log(msg);
       break;
     }
 
-    // Parsowanie pierwszych 3 kolumn oraz reszty linii jako polecenie z argumentami
+    // Parse first 3 columns and keep the remainder of the line as command + arguments
     int offset = 0;
     if (sscanf(line + start, "%63s %d %d %n", watch_list[process_count].name, &watch_list[process_count].cpu_limit,
                &watch_list[process_count].mem_limit, &offset) == 3 &&
@@ -182,7 +180,7 @@ int read_config(const char *filename, ManagedProcess *watch_list) {
           process_count++;
         } else {
           char msg[256];
-          snprintf(msg, sizeof(msg), "[WARNING] Nieprawidłowa składnia polecenia dla '%s' — pominięto.",
+          snprintf(msg, sizeof(msg), "[WARNING] Invalid command syntax for '%s' - entry skipped.",
                    watch_list[process_count].name);
           write_log(msg);
         }
@@ -192,10 +190,10 @@ int read_config(const char *filename, ManagedProcess *watch_list) {
 
   fclose(file);
 
-  // Wysłanie komunikatu w przypadku pustego pliku konfiguracyjnego
+  // Report if no valid process entries were loaded
   if (process_count == 0) {
-    printf("Plik konfiguracyjny '%s' jest pusty lub zawiera tylko komentarze.\n", filename);
-    printf("Proszę dodać przynajmniej jeden proces do nadzorowania.\n");
+    fprintf(stderr, "Configuration file '%s' is empty or contains only comments.\n", filename);
+    fprintf(stderr, "Please add at least one process to supervise.\n");
 
     return -1;
   }

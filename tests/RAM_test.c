@@ -1,7 +1,6 @@
 /**
  * @file RAM_test.c
- * @brief Skrypt testowy przeznaczony do weryfikacji twardego limitu pamięci
- * (RLIMIT_AS).
+ * @brief Test binary for verifying memory address-space limits (RLIMIT_AS).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,24 +8,24 @@
 #include <unistd.h>
 
 int main() {
-  printf("[PID: %d] RAM_test wystartował. Zaczynam zjadać pamięć...\n", getpid());
+  printf("[PID: %d] RAM_test started. Allocating memory...\n", getpid());
 
   char *ptrs[1000];
   int count = 0;
 
-  // Nieskończona pętla rezerwująca RAM co 1 sekundę
+  // Infinite loop allocating RAM every second
   while (1) {
-    // malloc: Alokuje 5 Megabajtów
+    // Allocate 5 MB chunk
     ptrs[count] = malloc(5 * 1024 * 1024);
 
     if (ptrs[count] != NULL) {
-      // memset wymusza fizyczne zaalokowanie stron pamięci
+      // Touch allocated pages with memset to back them physically
       memset(ptrs[count], 0, 5 * 1024 * 1024);
-      printf("[PID: %d] Zaalokowano %d MB RAM\n", getpid(), (count + 1) * 5);
+      printf("[PID: %d] Allocated %d MB RAM\n", getpid(), (count + 1) * 5);
     } else {
-      // Brak możliwości zaalokowania pamięci oznacza, że limit sprzętowy zablokował dostęp
-      printf("[PID: %d] Blad alokacji pamieci! Wymuszam crash...\n", getpid());
-      ptrs[count][0] = 'X';  // Próba dostępu wywoła błąd Segmentation Fault (SIGSEGV)
+      // Allocation failure indicates the kernel memory limit has been reached
+      printf("[PID: %d] Memory allocation failed! Triggering crash...\n", getpid());
+      ptrs[count][0] = 'X';  // Dereferencing NULL triggers Segmentation Fault (SIGSEGV)
     }
 
     count++;

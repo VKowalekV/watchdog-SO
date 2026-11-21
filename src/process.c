@@ -12,26 +12,25 @@
 #include "../include/config.h"
 #include "../include/logger.h"
 
-// Globalna tablica przechowująca aktualnie nadzorowane procesy
+// Global array holding currently supervised processes
 static ManagedProcess watch_list[MAX_PROCESSES];
-// Liczba aktualnie nadzorowanych procesów
+// Number of currently supervised processes
 static int process_count = 0;
 
-// Deklaracje wewnętrznych statycznych funkcji pomocniczych
+// Internal static helper declarations
 static void start_process(ManagedProcess *process);
 static void get_death_reason(int status, char *reason, size_t size);
 
 /**
- * @brief Inicjalizuje procesy podczas startu demona.
- * Wczytuje plik konfiguracyjny i dla każdego zdefiniowanego procesu wywołuje
- * fork/exec.
- * @param config_path Ścieżka do pliku konfiguracyjnego
+ * @brief Initializes supervised processes on daemon startup.
+ * Loads the configuration file and spawns each configured entry via fork/exec.
+ * @param config_path Path to the configuration file
  */
 void process_init(const char *config_path) {
   process_count = read_config(config_path, watch_list);
 
   if (process_count <= 0) {
-    write_log("[SYSTEM] Błąd wczytywania lub plik config jest pusty!");
+    write_log("[SYSTEM] Failed to load configuration or config file is empty.");
     return;
   }
 
@@ -42,11 +41,11 @@ void process_init(const char *config_path) {
 }
 
 /**
- * @brief Obsługuje sygnał SIGHUP. Porównuje nową konfigurację ze starą i wprowadza zmiany.
- * @param config_path Ścieżka do pliku konfiguracyjnego
+ * @brief Handles SIGHUP. Diffs new configuration against running state and applies changes.
+ * @param config_path Path to the configuration file
  */
 void process_reload(const char *config_path) {
-  write_log("[SYSTEM] Otrzymano SIGHUP. Przeładowywanie konfiguracji...");
+  write_log("[SYSTEM] Received SIGHUP. Reloading configuration...");
 
   int isChanged = 0;
 
@@ -55,13 +54,13 @@ void process_reload(const char *config_path) {
   int new_process_count = read_config(config_path, new_watch_list);
 
   if (new_process_count <= 0) {
-    write_log("[SYSTEM] Plik konfiguracyjny jest pusty! Przerywam przeładowanie.");
+    write_log("[SYSTEM] Configuration file is empty. Aborting reload.");
     return;
   }
 
-  // Sprawdzenie starych procesów
-  // Jeśli proces zniknął z pliku konfiguracyjnego lub zmieniły się jego
-  // parametry (np. limity) ubijamy go sygnałem SIGTERM do całej grupy procesów
+  // Check existing processes
+  // If a process was removed or its parameters (e.g. limits) changed,
+  // terminate its entire process group with SIGTERM
   for (int i = 0; i < process_count; i++) {
     int found = 0;
 
@@ -70,15 +69,13 @@ void process_reload(const char *config_path) {
         if (strcmp(watch_list[i].command, new_watch_list[j].command) == 0 &&
             watch_list[i].cpu_limit == new_watch_list[j].cpu_limit &&
             watch_list[i].mem_limit == new_watch_list[j].mem_limit) {
-          // Przepisujemy aktualny PID do nowej tablicy, aby go nie zrestartować
+          // Preserve current PID in the new table so it is not restarted
           new_watch_list[j].current_pid = watch_list[i].current_pid;
         } else {
           isChanged = 1;
           char msg[1024];
 
-          snprintf(msg, sizeof(msg),
-                   "[RELOAD] Zmodyfikowano limity dla '%s'. Zatrzymywanie "
-                   "starego procesu...",
+          snprintf(msg, sizeof(msg), "[RELOAD] Configuration changed for '%s'. Stopping previous process...",
                    watch_list[i].name);
 
           write_log(msg);
@@ -95,18 +92,18 @@ void process_reload(const char *config_path) {
       isChanged = 1;
       char msg[1024];
 
-      snprintf(msg, sizeof(msg), "[RELOAD] Usunięto proces '%s' z konfiguracji. Zatrzymywanie...", watch_list[i].name);
+      snprintf(msg, sizeof(msg), "[RELOAD] Removed process '%s' from configuration. Stopping...", watch_list[i].name);
 
       write_log(msg);
       kill(-watch_list[i].current_pid, SIGTERM);
     }
   }
 
-  // Kopiowanie i nadpisanie nowej konfiguracji do pamięci
+  // Copy updated configuration into active state
   memcpy(watch_list, new_watch_list, sizeof(ManagedProcess) * MAX_PROCESSES);
   process_count = new_process_count;
 
-  // Uruchomienie nowych procesów które miały PID = 0
+  // Start new or modified processes whose PID is 0
   for (int i = 0; i < process_count; i++) {
     if (watch_list[i].current_pid == 0) {
       isChanged = 1;
@@ -115,16 +112,16 @@ void process_reload(const char *config_path) {
   }
 
   if (isChanged == 1) {
-    write_log("[SYSTEM] Przeładowywanie konfiguracji zakończone pomyślnie.");
+    write_log("[SYSTEM] Configuration reload completed successfully.");
   } else {
-    write_log("[SYSTEM] Konfiguracja nie uległa zmianie.");
+    write_log("[SYSTEM] Configuration unchanged.");
   }
 }
 
 /**
- * @brief Reakcja na śmierć procesu potomnego (restart i zalogowanie przyczyny).
- * @param dead_pid Numer PID procesu, który zmarł
- * @param status Kod wyjścia zwrócony przez wywołanie waitpid
+ * @brief Handles child termination (logs cause and restarts the process).
+ * @param dead_pid PID of the terminated child process
+ * @param status Wait status returned by waitpid
  */
 void process_handle_death(pid_t dead_pid, int status) {
   for (int i = 0; i < process_count; i++) {
@@ -135,8 +132,7 @@ void process_handle_death(pid_t dead_pid, int status) {
       get_death_reason(status, reason, sizeof(reason));
 
       char msg[1024];
-      snprintf(msg, sizeof(msg),
-               "[RESTART] Proces '%s' (PID: %d) zakończył działanie. Przyczyna: %s. Uruchamianie ponownie...",
+      snprintf(msg, sizeof(msg), "[RESTART] Process '%s' (PID: %d) terminated. Reason: %s. Restarting...",
                watch_list[i].name, dead_pid, reason);
       write_log(msg);
 
@@ -148,10 +144,10 @@ void process_handle_death(pid_t dead_pid, int status) {
 }
 
 /**
- * @brief Bezpieczne zamknięcie wszystkich nadzorowanych procesów poprzez wysłanie SIGTERM.
+ * @brief Gracefully stops all supervised processes by sending SIGTERM.
  */
 void process_shutdown() {
-  write_log("[SYSTEM] Zamykanie procesów potomnych...");
+  write_log("[SYSTEM] Stopping supervised child processes...");
   for (int i = 0; i < process_count; i++) {
     if (watch_list[i].current_pid > 0) {
       kill(-watch_list[i].current_pid, SIGTERM);
@@ -160,39 +156,37 @@ void process_shutdown() {
 }
 
 /**
- * @brief Tworzy nowy proces potomny i nakłada na niego limity zasobów.
- * @param process Wskaźnik na strukturę nadzorowanego procesu
+ * @brief Forks a new child process and applies resource limits.
+ * @param process Pointer to the supervised process entry
  */
 static void start_process(ManagedProcess *process) {
   char arg_buf[sizeof(process->command)];
   char *argv[MAX_ARGS];
   if (parse_command_args(process->command, arg_buf, sizeof(arg_buf), argv, MAX_ARGS) <= 0) {
     char msg[2048];
-    snprintf(msg, sizeof(msg), "[ERROR] Nieprawidłowe polecenie dla procesu '%s' (%s)!", process->name,
-             process->command);
+    snprintf(msg, sizeof(msg), "[ERROR] Invalid command for process '%s' (%s).", process->name, process->command);
     write_log(msg);
     return;
   }
 
   if (access(argv[0], X_OK) == -1) {
     char msg[2048];
-    snprintf(msg, sizeof(msg), "[ERROR] Plik dla procesu '%s' (%s) nie istnieje lub brak praw do wykonania!",
+    snprintf(msg, sizeof(msg), "[ERROR] Executable for process '%s' (%s) does not exist or is not executable.",
              process->name, argv[0]);
     write_log(msg);
     return;
   }
 
-  pid_t pid = fork();  // Skopiowanie pamięci procesu
+  pid_t pid = fork();  // Clone process address space
 
   if (pid == 0) {
-    // Odcina proces jako lider nowej grupy aby można było go łatwo ubić wraz
-    // ze wszystkimi jego dziećmi
+    // Isolate process in its own process group so child trees can be terminated together
     setpgid(0, 0);
 
-    // Nałożenie limitów sprzętowych
+    // Apply kernel resource limits
     if (process->mem_limit > 0) {
       struct rlimit rl_mem;
-      rl_mem.rlim_cur = rl_mem.rlim_max = (rlim_t)process->mem_limit * 1024ULL * 1024ULL;  // MB na bajty
+      rl_mem.rlim_cur = rl_mem.rlim_max = (rlim_t)process->mem_limit * 1024ULL * 1024ULL;  // MB to bytes
       setrlimit(RLIMIT_AS, &rl_mem);
     }
 
@@ -202,48 +196,48 @@ static void start_process(ManagedProcess *process) {
       setrlimit(RLIMIT_CPU, &rl_cpu);
     }
 
-    // Zamiana skopiowanego procesu Watchdoga na proces docelowy
+    // Replace cloned Watchdog process with target executable
     execvp(argv[0], argv);
-    _exit(EXIT_FAILURE);  // Nigdy nie powinno się wykonać, chyba że plik nagle wyparował
+    _exit(EXIT_FAILURE);  // Should never be reached unless executable disappeared
 
   } else if (pid > 0) {
     process->current_pid = pid;
 
     char msg[1024];
-    snprintf(msg, sizeof(msg), "[START] Uruchomiono '%s' (PID: %d) | Limity: CPU %d s, RAM %d MB", process->name, pid,
+    snprintf(msg, sizeof(msg), "[START] Started '%s' (PID: %d) | Limits: CPU %d s, RAM %d MB", process->name, pid,
              process->cpu_limit, process->mem_limit);
 
     write_log(msg);
   } else {
     char msg[1024];
-    snprintf(msg, sizeof(msg), "[ERROR] Blad fork() dla: %s", process->name);
+    snprintf(msg, sizeof(msg), "[ERROR] fork() failed for '%s'.", process->name);
     write_log(msg);
   }
 }
 
 /**
- * @brief Zamienia status zakończenia procesu na tekstową przyczynę błędu.
- * @param status Kod wyjścia z funkcji waitpid
- * @param reason Bufor docelowy na komunikat
- * @param size Rozmiar bufora
+ * @brief Converts a waitpid termination status into a human-readable reason string.
+ * @param status Wait status from waitpid
+ * @param reason Destination buffer for description
+ * @param size Buffer size
  */
 static void get_death_reason(int status, char *reason, size_t size) {
   if (WIFEXITED(status)) {
-    snprintf(reason, size, "kod wyjścia %d", WEXITSTATUS(status));
+    snprintf(reason, size, "exit code %d", WEXITSTATUS(status));
   } else if (WIFSIGNALED(status)) {
     int signal_num = WTERMSIG(status);
     if (signal_num == SIGKILL) {
-      snprintf(reason, size, "SIGKILL (twardy limit CPU lub brak RAMu)");
+      snprintf(reason, size, "SIGKILL (hard CPU limit or OOM kill)");
     } else if (signal_num == SIGSEGV) {
-      snprintf(reason, size, "SIGSEGV (błąd ochrony pamięci)");
+      snprintf(reason, size, "SIGSEGV (segmentation fault)");
     } else if (signal_num == SIGXCPU) {
-      snprintf(reason, size, "SIGXCPU (miękki limit procesora)");
+      snprintf(reason, size, "SIGXCPU (CPU time limit exceeded)");
     } else if (signal_num == SIGTERM) {
-      snprintf(reason, size, "SIGTERM (poproszono o wyłączenie)");
+      snprintf(reason, size, "SIGTERM (terminated)");
     } else {
-      snprintf(reason, size, "sygnał nr %d", signal_num);
+      snprintf(reason, size, "signal %d", signal_num);
     }
   } else {
-    snprintf(reason, size, "nieznana (zniknął w niewyjaśnionych okolicznościach)");
+    snprintf(reason, size, "unknown");
   }
 }

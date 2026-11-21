@@ -1,14 +1,14 @@
 /**
  * @file daemon.h
- * @brief Nagłówek modułu odpowiedzialnego za tło i odłączenie od terminala.
+ * @brief Header for background daemonization and terminal detachment.
  */
 #ifndef DAEMON_H
 #define DAEMON_H
 
 /**
- * @brief Zamienia aktualny proces w usługę systemową działającą w tle.
- * Tworzy nowy proces (fork), odłącza go od sesji (setsid), zamyka standardowe
- * strumienie (I/O) i przekierowuje je do /dev/null.
+ * @brief Turns the current process into a background system daemon.
+ * Forks a new process, detaches from the session (setsid), closes standard
+ * I/O streams, and redirects them to /dev/null.
  */
 void daemonize();
 

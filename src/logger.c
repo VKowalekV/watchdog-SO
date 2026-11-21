@@ -19,16 +19,16 @@ void logger_init(const char *log_path, int mirror_stderr) {
 }
 
 /**
- * @brief Bezpieczny zapis logu z datą i czasem do pliku logów.
- * @param message Treść komunikatu do zapisania
+ * @brief Safely appends a timestamped message to the log file.
+ * @param message Message text to write
  */
 void write_log(const char *message) {
-  // Pobranie aktualnego czasu systemowego
+  // Get current system time
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
   char date[32];
 
-  // Formatowanie daty w formacie (YYYY-MM-DD HH:MM:SS)
+  // Format timestamp as (YYYY-MM-DD HH:MM:SS)
   if (t != NULL) {
     strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", t);
   } else {
@@ -40,13 +40,13 @@ void write_log(const char *message) {
     fflush(stderr);
   }
 
-  // Otwarcie pliku w trybie dopisywania
+  // Open log file in append mode
   FILE *file = fopen(current_log_file, "a");
   if (!file) {
-    return;  // Jeśli nie mamy uprawnień, po prostu ignorujemy
+    return;  // Ignore silently if permissions are missing
   }
 
-  // Zapis linii do pliku w formacie [DATA] KOMUNIKAT
+  // Write line in [TIMESTAMP] MESSAGE format
   fprintf(file, "[%s] %s\n", date, message);
   fclose(file);
 }
