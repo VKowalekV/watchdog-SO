@@ -164,10 +164,20 @@ void process_shutdown() {
  * @param process Wskaźnik na strukturę nadzorowanego procesu
  */
 static void start_process(ManagedProcess *process) {
-  if (access(process->command, X_OK) == -1) {
+  char arg_buf[sizeof(process->command)];
+  char *argv[MAX_ARGS];
+  if (parse_command_args(process->command, arg_buf, sizeof(arg_buf), argv, MAX_ARGS) <= 0) {
+    char msg[2048];
+    snprintf(msg, sizeof(msg), "[ERROR] Nieprawidłowe polecenie dla procesu '%s' (%s)!", process->name,
+             process->command);
+    write_log(msg);
+    return;
+  }
+
+  if (access(argv[0], X_OK) == -1) {
     char msg[2048];
     snprintf(msg, sizeof(msg), "[ERROR] Plik dla procesu '%s' (%s) nie istnieje lub brak praw do wykonania!",
-             process->name, process->command);
+             process->name, argv[0]);
     write_log(msg);
     return;
   }
@@ -193,10 +203,8 @@ static void start_process(ManagedProcess *process) {
     }
 
     // Zamiana skopiowanego procesu Watchdoga na proces docelowy
-    char *args[] = {process->command, NULL};
-    execvp(args[0], args);
-    exit(EXIT_FAILURE);  // Nigdy nie powinno się wykonać, chyba że plik nagle
-                         // wyparował
+    execvp(argv[0], argv);
+    _exit(EXIT_FAILURE);  // Nigdy nie powinno się wykonać, chyba że plik nagle wyparował
 
   } else if (pid > 0) {
     process->current_pid = pid;

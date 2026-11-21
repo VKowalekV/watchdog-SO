@@ -85,13 +85,13 @@ sudo nano /etc/watchdog/watchdog.conf
 
 ### File Format
 
-Each non-comment line describes one supervised process:
+Each non-comment line describes one supervised process (supporting optional CLI arguments and single/double quotes):
 
 ```text
 # Lines starting with '#' are comments
-# Format: <Name>  <CPU_sec>  <RAM_MB>  <Path>
+# Format: <Name>  <CPU_sec>  <RAM_MB>  <Path> [Args...]
 
-ProcessName  30  50  /absolute/path/to/executable
+ProcessName  30  50  /absolute/path/to/executable --port 8080
 ```
 
 | Field     | Description                                       |
@@ -100,13 +100,16 @@ ProcessName  30  50  /absolute/path/to/executable
 | `CPU_sec` | CPU time limit in seconds (`0` = no limit)        |
 | `RAM_MB`  | Virtual memory limit in MB (`0` = no limit)       |
 | `Path`    | Absolute path to the executable binary            |
+| `Args`    | Optional CLI arguments (supports `'...'` / `"..."`) |
 
 ### Example Configuration
 
 ```text
-# Name       CPU_sec  RAM_MB  Path
+# Name       CPU_sec  RAM_MB  Path [Args...]
 CPU_test     20       100     /home/user/watchdog-SO/build/tests/CPU_test
 RAM_test     50       30      /home/user/watchdog-SO/build/tests/RAM_test
+worker       0        128     /usr/bin/python3 /opt/worker.py --interval 5
+shell_loop   0        0       /bin/sh -c "while true; do sleep 1; done"
 ```
 
 > **Note:** Paths must be absolute and target executables must have execute permissions (`chmod +x`).

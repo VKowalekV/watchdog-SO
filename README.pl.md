@@ -46,28 +46,31 @@ sudo nano /etc/watchdog/watchdog.conf
 
 ### Format pliku
 
-Każda linia opisuje jeden nadzorowany proces:
+Każda linia opisuje jeden nadzorowany proces (z obsługą opcjonalnych argumentów CLI oraz cudzysłowów `'...'` / `"..."`):
 
 ```
 # Komentarze zaczynają się od '#'
-# Format: <Nazwa>  <CPU_sek>  <RAM_MB>  <Ścieżka>
+# Format: <Nazwa>  <CPU_sek>  <RAM_MB>  <Ścieżka> [Argumenty...]
 
-NazwaProcesu  30  50  /bezwzgledna/sciezka/do/programu
+NazwaProcesu  30  50  /bezwzgledna/sciezka/do/programu --port 8080
 ```
 
-| Pole      | Opis                                                |
-| --------- | --------------------------------------------------- |
-| `Nazwa`   | Dowolna nazwa (używana w logach), bez spacji        |
-| `CPU_sek` | Limit czasu CPU w sekundach (`0` = brak limitu)     |
-| `RAM_MB`  | Limit pamięci RAM w megabajtach (`0` = brak limitu) |
-| `Ścieżka` | Bezwzględna ścieżka do pliku wykonywalnego          |
+| Pole        | Opis                                                   |
+| ----------- | ------------------------------------------------------ |
+| `Nazwa`     | Dowolna nazwa (używana w logach), bez spacji           |
+| `CPU_sek`   | Limit czasu CPU w sekundach (`0` = brak limitu)        |
+| `RAM_MB`    | Limit pamięci RAM w megabajtach (`0` = brak limitu)    |
+| `Ścieżka`   | Bezwzględna ścieżka do pliku wykonywalnego             |
+| `Argumenty` | Opcjonalne argumenty CLI (obsługuje `'...'` i `"..."`) |
 
 ### Przykładowy plik konfiguracyjny
 
 ```
-# Nazwa      CPU_sek  RAM_MB  Ścieżka
+# Nazwa      CPU_sek  RAM_MB  Ścieżka [Argumenty...]
 CPU_test     20       100     /home/user/watchdog_so/build/tests/CPU_test
 RAM_test     50       30      /home/user/watchdog_so/build/tests/RAM_test
+worker       0        128     /usr/bin/python3 /opt/worker.py --interval 5
+shell_loop   0        0       /bin/sh -c "while true; do sleep 1; done"
 ```
 
 > **Uwaga:** Ścieżki muszą być bezwzględne. Plik wykonywalny musi mieć prawo wykonania (`chmod +x`).
