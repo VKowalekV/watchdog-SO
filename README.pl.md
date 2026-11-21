@@ -1,10 +1,53 @@
 > [English version](README.md)
 
-[![CI](https://github.com/VKowalekV/watchdog-SO/actions/workflows/ci.yml/badge.svg)](https://github.com/VKowalekV/watchdog-SO/actions/workflows/ci.yml)
+[![CI](https://github.com/VKowalekV/watchdog-SO/actions/workflows/ci.yml/badge.svg)](https://github.com/VKowalekV/watchdog-SO/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-# Watchdog – Instrukcja uruchomienia
+# Watchdog – Systemowy demon nadzorujący procesy w Linuksie
 
-Systemowy demon nadzorujący procesy. Uruchamia podane programy jako podprocesy, monitoruje ich stan i restartuje je w razie zakończenia.
+Lekki, napisany w czystym C demon nadzorujący procesy dla systemu Linux bez zewnętrznych zależności. Uruchamia skonfigurowane programy jako procesy potomne, wymusza limity CPU i pamięci na poziomie jądra, monitoruje ich stan oraz automatycznie restartuje procesy po zakończeniu pracy.
+
+---
+
+## Główne funkcje
+
+- **Daemonizacja i tryb pierwszoplanowy:** Odłącza się od terminala poprzez podwójny `fork`, `setsid()`, `umask(0)`, `chdir("/")` i przekierowanie I/O do `/dev/null` lub działa na pierwszym planie (`--foreground`) z dublowaniem logów na `stderr`.
+- **Konfigurowalne ścieżki uruchomienia:** Obsługa własnych ścieżek konfiguracji, logów i pliku PID przez flagi CLI (`--config`, `--log`, `--pid`), co pozwala działać bez uprawnień `root` oraz w kontenerach.
+- **Deklaratywna konfiguracja:** Nadzoruje do 32 procesów jednocześnie (`MAX_PROCESSES`) zdefiniowanych w `/etc/watchdog/watchdog.conf` (z obsługą argumentów CLI oraz cudzysłowów).
+- **Limity zasobów na poziomie jądra:** Nakłada limity przez `setrlimit()` (`RLIMIT_CPU` w sekundach oraz `RLIMIT_AS` w MB; `0` wyłącza limit).
+- **Izolacja grup procesów:** Umieszcza każde dziecko we własnej grupie procesów (`setpgid(0, 0)`), aby czysto zamykać całe drzewa potomków.
+- **Automatyczny restart i diagnostyka:** Wykrywa zakończenie przez blokujący `waitpid()` i loguje kod wyjścia lub sygnał kończący (`SIGXCPU`, `SIGSEGV`, `SIGKILL`, `SIGTERM`) przed restartem.
+- **Hot-reload bez przestoju:** Przeładowuje konfigurację na sygnał `SIGHUP`, pozostawiając niezmienione procesy aktywne oraz aktualizując lub zatrzymując zmienione wpisy.
+- **Bezpieczne zamykanie:** Obsługuje `SIGTERM` / `SIGINT`, wysyła `SIGTERM` do nadzorowanych grup procesów, usuwa `/var/run/watchdog.pid` i kończy pracę.
+- **Ochrona przed podwójnym uruchomieniem:** Blokuje uruchomienie duplikatu za pomocą `/var/run/watchdog.pid` i sprawdzenia `kill(pid, 0)`.
+
+---
+
+## Struktura projektu
+
+```text
+.
+├── .github/workflows/
+│   └── ci.yml              # GitHub Actions CI (-Werror + ASan/UBSan)
+├── Makefile
+├── watchdog.c              # Punkt wejścia demona, blokada PID, obsługa sygnałów, pętla waitpid
+├── include/
+│   ├── config.h            # Struktury konfiguracji, MAX_PROCESSES, MAX_ARGS, CONFIG_FILE
+│   ├── daemon.h            # Interfejs daemonizacji
+│   ├── logger.h            # Interfejs logowania i ścieżka LOG_FILE
+│   └── process.h           # Interfejs zarządzania cyklem życia procesów
+├── src/
+│   ├── config.c            # Parser konfiguracji, tokenizator argumentów, generator szablonu
+│   ├── daemon.c            # Daemonizacja w tle przez podwójny fork
+│   ├── logger.c            # Logger z timestampami do pliku i stderr
+│   └── process.c           # fork/exec, setrlimit, przeładowanie SIGHUP, restart, zamykanie
+└── tests/
+    ├── CPU_test.c          # Program testowy obciążający CPU (RLIMIT_CPU)
+    ├── RAM_test.c          # Program testowy alokujący RAM (RLIMIT_AS)
+    ├── unit_tests.c        # Testy jednostkowe parsera konfiguracji i argumentów
+    ├── integration_test.sh # Testy end-to-end trybu --foreground, SIGHUP i SIGTERM
+    ├── luzny_test.sh       # Pomocniczy skrypt testowy
+    └── test_petla.sh       # Pomocniczy skrypt pętli testowej
+```
 
 ---
 
@@ -56,7 +99,7 @@ sudo nano /etc/watchdog/watchdog.conf
 
 Każda linia opisuje jeden nadzorowany proces (z obsługą opcjonalnych argumentów CLI oraz cudzysłowów `'...'` / `"..."`):
 
-```
+```text
 # Komentarze zaczynają się od '#'
 # Format: <Nazwa>  <CPU_sek>  <RAM_MB>  <Ścieżka> [Argumenty...]
 
@@ -73,10 +116,10 @@ NazwaProcesu  30  50  /bezwzgledna/sciezka/do/programu --port 8080
 
 ### Przykładowy plik konfiguracyjny
 
-```
+```text
 # Nazwa      CPU_sek  RAM_MB  Ścieżka [Argumenty...]
-CPU_test     20       100     /home/user/watchdog_so/build/tests/CPU_test
-RAM_test     50       30      /home/user/watchdog_so/build/tests/RAM_test
+CPU_test     20       100     /home/user/watchdog-SO/build/tests/CPU_test
+RAM_test     50       30      /home/user/watchdog-SO/build/tests/RAM_test
 worker       0        128     /usr/bin/python3 /opt/worker.py --interval 5
 shell_loop   0        0       /bin/sh -c "while true; do sleep 1; done"
 ```
@@ -120,7 +163,20 @@ sudo tail -f /var/log/watchdog.log
 
 ## 4. Logi
 
-Plik logów: `/var/log/watchdog.log`
+Domyślny plik logów: `/var/log/watchdog.log` (można nadpisać flagą `-l, --log <ścieżka>`). W trybie `--foreground` logi są dodatkowo wypisywane na `stderr`.
+
+Wpisy mają format `[YYYY-MM-DD HH:MM:SS] <komunikat>`.
+
+### Przykładowe logi
+
+```text
+[2026-11-21 21:00:00] [SYSTEM] Watchdog started successfully and began supervision.
+[2026-11-21 21:00:00] [START] Started 'CPU_test' (PID: 12345) | Limits: CPU 20 s, RAM 20 MB
+[2026-11-21 21:00:20] [RESTART] Process 'CPU_test' (PID: 12345) terminated. Reason: SIGXCPU (CPU time limit exceeded). Restarting...
+[2026-11-21 21:00:21] [START] Started 'CPU_test' (PID: 12399) | Limits: CPU 20 s, RAM 20 MB
+[2026-11-21 21:01:00] [SYSTEM] Received SIGHUP. Reloading configuration...
+[2026-11-21 21:01:00] [SYSTEM] Configuration reload completed successfully.
+```
 
 ---
 
@@ -184,7 +240,7 @@ Demon wysyła `SIGTERM` do wszystkich nadzorowanych procesów, usuwa plik PID i 
 
 Przygotowaliśmy dwa programy testowe, które pozwalają zademonstrować działanie mechanizmu limitów zasobów. Po skompilowaniu projektu (`make`) gotowe pliki binarne znajdują się w katalogu `build/tests/`.
 
-### CPU_test
+### `CPU_test`
 
 Symuluje proces pochłaniający 100% czasu procesora (nieskończona pętla obliczeniowa). Służy do weryfikacji limitu `RLIMIT_CPU`.
 
@@ -192,12 +248,12 @@ Po upływie limitu CPU jądro wysyła sygnał `SIGXCPU`, a demon odnotowuje to w
 
 **Wpis w konfiguracji** (`/etc/watchdog/watchdog.conf`):
 
-```
+```text
 # Nazwa    CPU_sek  RAM_MB  Ścieżka
-CPU_test   20       20       /ścieżka/do/projektu/build/tests/CPU_test
+CPU_test   20       20      /ścieżka/do/projektu/build/tests/CPU_test
 ```
 
-### RAM_test
+### `RAM_test`
 
 Symuluje wyciek pamięci – co sekundę alokuje 5 MB. Służy do weryfikacji limitu `RLIMIT_AS`.
 
@@ -205,16 +261,16 @@ Gdy limit zostanie osiągnięty, `malloc()` zwraca `NULL`, program próbuje zapi
 
 **Wpis w konfiguracji** (`/etc/watchdog/watchdog.conf`):
 
-```
+```text
 # Nazwa    CPU_sek  RAM_MB  Ścieżka
-RAM_test   30        30      /ścieżka/do/projektu/build/tests/RAM_test
+RAM_test   30       30      /ścieżka/do/projektu/build/tests/RAM_test
 ```
 
 ### Przykład użycia obu programów jednocześnie
 
-```
-CPU_test   20   20    /home/user/watchdog_so/build/tests/CPU_test
-RAM_test   30   30    /home/user/watchdog_so/build/tests/RAM_test
+```text
+CPU_test   20   20    /home/user/watchdog-SO/build/tests/CPU_test
+RAM_test   30   30    /home/user/watchdog-SO/build/tests/RAM_test
 ```
 
 Po uruchomieniu demona zaczną się pojawiać wpisy w logach:
@@ -223,7 +279,7 @@ Po uruchomieniu demona zaczną się pojawiać wpisy w logach:
 sudo tail -f /var/log/watchdog.log
 ```
 
-W logach powinny pojawiać się wpisy `[RESTART]` z przyczyną zakończenia procesu (`SIGXCPU` dla CPU_test, `SIGSEGV` dla RAM_test).
+W logach powinny pojawiać się wpisy `[RESTART]` z przyczyną zakończenia procesu (`SIGXCPU` dla `CPU_test`, `SIGSEGV` dla `RAM_test`).
 
 ---
 
@@ -231,8 +287,24 @@ W logach powinny pojawiać się wpisy `[RESTART]` z przyczyną zakończenia proc
 
 Próba uruchomienia drugiej instancji demona kończy się komunikatem:
 
-```
-Watchdog już działa (PID: 1234)!
+```text
+Watchdog is already running (PID: 1234)!
 ```
 
 i natychmiastowym zakończeniem programu.
+
+---
+
+## Plany rozwoju (Roadmap)
+
+- Atomowe blokowanie pliku PID za pomocą `flock()`
+- Exponential backoff i ochrona przed crash-loopami przy powtarzających się awariach
+- Eskalacja zamykania procesów (`SIGTERM` -> timeout -> `SIGKILL`)
+- Przekierowanie `stdout`/`stderr` procesów potomnych oraz rotacja logów
+- Opcjonalne limity zasobów przez `cgroups v2` obok `setrlimit()`
+
+---
+
+## Licencja
+
+Projekt udostępniany jest na licencji MIT – szczegóły w pliku [LICENSE](LICENSE).

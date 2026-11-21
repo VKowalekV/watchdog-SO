@@ -1,6 +1,6 @@
 > [Polska wersja](README.pl.md)
 
-[![CI](https://github.com/VKowalekV/watchdog-SO/actions/workflows/ci.yml/badge.svg)](https://github.com/VKowalekV/watchdog-SO/actions/workflows/ci.yml)
+[![CI](https://github.com/VKowalekV/watchdog-SO/actions/workflows/ci.yml/badge.svg)](https://github.com/VKowalekV/watchdog-SO/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 # Watchdog – Linux Process Supervisor Daemon
 
@@ -163,9 +163,20 @@ sudo tail -f /var/log/watchdog.log
 
 ## 4. Logs
 
-Log file path: `/var/log/watchdog.log`
+Default log file path: `/var/log/watchdog.log` (override with `-l, --log <path>`). When running with `--foreground`, log entries are also mirrored to `stderr`.
 
 Entries are formatted with timestamps as `[YYYY-MM-DD HH:MM:SS] <message>`.
+
+### Sample Log Output
+
+```text
+[2026-11-21 21:00:00] [SYSTEM] Watchdog started successfully and began supervision.
+[2026-11-21 21:00:00] [START] Started 'CPU_test' (PID: 12345) | Limits: CPU 20 s, RAM 20 MB
+[2026-11-21 21:00:20] [RESTART] Process 'CPU_test' (PID: 12345) terminated. Reason: SIGXCPU (CPU time limit exceeded). Restarting...
+[2026-11-21 21:00:21] [START] Started 'CPU_test' (PID: 12399) | Limits: CPU 20 s, RAM 20 MB
+[2026-11-21 21:01:00] [SYSTEM] Received SIGHUP. Reloading configuration...
+[2026-11-21 21:01:00] [SYSTEM] Configuration reload completed successfully.
+```
 
 ---
 
@@ -277,10 +288,20 @@ You should see `[RESTART]` entries showing the detected termination cause (`SIGX
 Attempting to start a second daemon instance while another is active prints:
 
 ```text
-Watchdog już działa (PID: 1234)!
+Watchdog is already running (PID: 1234)!
 ```
 
 and exits immediately with a non-zero status.
+
+---
+
+## Roadmap
+
+- Atomic PID-file locking with `flock()`
+- Exponential backoff and crash-loop protection for repeatedly failing processes
+- Graceful shutdown escalation (`SIGTERM` -> timeout -> `SIGKILL`)
+- Child `stdout`/`stderr` redirection and log rotation
+- Optional `cgroups v2` resource limits alongside `setrlimit()`
 
 ---
 
