@@ -1,5 +1,7 @@
 > [Polska wersja](README.pl.md)
 
+[![CI](https://github.com/VKowalekV/watchdog-SO/actions/workflows/ci.yml/badge.svg)](https://github.com/VKowalekV/watchdog-SO/actions/workflows/ci.yml)
+
 # Watchdog – Linux Process Supervisor Daemon
 
 A lightweight, zero-dependency Linux process supervisor daemon written in pure C. It launches configured programs as supervised child processes, enforces per-process CPU and memory resource limits at the kernel level, monitors process health, and automatically restarts failed processes.
@@ -24,23 +26,27 @@ A lightweight, zero-dependency Linux process supervisor daemon written in pure C
 
 ```text
 .
+├── .github/workflows/
+│   └── ci.yml              # GitHub Actions CI (-Werror + ASan/UBSan)
 ├── Makefile
-├── watchdog.c          # Daemon entry point, PID lock, signal setup, main waitpid loop
+├── watchdog.c              # Daemon entry point, PID lock, signal setup, main waitpid loop
 ├── include/
-│   ├── config.h        # Configuration structs and constants (MAX_PROCESSES, CONFIG_FILE)
-│   ├── daemon.h        # Daemonization interface
-│   ├── logger.h        # Logging interface and LOG_FILE path
-│   └── process.h       # Process lifecycle management interface
+│   ├── config.h            # Configuration structs, MAX_PROCESSES, MAX_ARGS, CONFIG_FILE
+│   ├── daemon.h            # Daemonization interface
+│   ├── logger.h            # Logging interface and LOG_FILE path
+│   └── process.h           # Process lifecycle management interface
 ├── src/
-│   ├── config.c        # Config parser and default template generator
-│   ├── daemon.c        # Double-fork background daemonization
-│   ├── logger.c        # Timestamped file logger
-│   └── process.c       # fork/exec, setrlimit, SIGHUP reload, death handling, shutdown
+│   ├── config.c            # Config parser, argument tokenizer, default template generator
+│   ├── daemon.c            # Double-fork background daemonization
+│   ├── logger.c            # Timestamped file/stderr logger
+│   └── process.c           # fork/exec, setrlimit, SIGHUP reload, death handling, shutdown
 └── tests/
-    ├── CPU_test.c      # CPU stress test binary for RLIMIT_CPU verification
-    ├── RAM_test.c      # Memory allocation test binary for RLIMIT_AS verification
-    ├── luzny_test.sh   # Helper test script
-    └── test_petla.sh   # Helper loop test script
+    ├── CPU_test.c          # CPU stress test binary for RLIMIT_CPU verification
+    ├── RAM_test.c          # Memory allocation test binary for RLIMIT_AS verification
+    ├── unit_tests.c        # Unit tests for config parsing and argument tokenization
+    ├── integration_test.sh # End-to-end foreground/SIGHUP/SIGTERM test suite
+    ├── luzny_test.sh       # Helper test script
+    └── test_petla.sh       # Helper loop test script
 ```
 
 ---
@@ -64,6 +70,12 @@ This builds:
 - `build/watchdog` – main supervisor daemon
 - `build/tests/CPU_test` – test binary that saturates CPU usage
 - `build/tests/RAM_test` – test binary that continuously allocates RAM
+
+To run the automated unit and integration test suite (no `root` required):
+
+```bash
+make test
+```
 
 To remove build artifacts:
 

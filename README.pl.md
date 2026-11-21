@@ -1,5 +1,7 @@
 > [English version](README.md)
 
+[![CI](https://github.com/VKowalekV/watchdog-SO/actions/workflows/ci.yml/badge.svg)](https://github.com/VKowalekV/watchdog-SO/actions/workflows/ci.yml)
+
 # Watchdog – Instrukcja uruchomienia
 
 Systemowy demon nadzorujący procesy. Uruchamia podane programy jako podprocesy, monitoruje ich stan i restartuje je w razie zakończenia.
@@ -25,6 +27,12 @@ Tworzy pliki:
 - `build/watchdog` – główny demon
 - `build/tests/CPU_test` – program testowy obciążający CPU
 - `build/tests/RAM_test` – program testowy zapełniający RAM
+
+Aby uruchomić automatyczne testy jednostkowe i integracyjne (bez uprawnień `root`):
+
+```bash
+make test
+```
 
 Aby wyczyścić pliki binarne:
 

@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test (gcc -Werror)
+        run: make clean && make EXTRA_CFLAGS="-Werror" test
+
+      - name: Build and test (ASan + UBSan)
+        run: make clean && make EXTRA_CFLAGS="-Werror -g -fsanitize=address,undefined" test
